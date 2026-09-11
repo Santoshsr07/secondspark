@@ -63,11 +63,17 @@ export default function Home() {
         </Link>
 
         <div className="hidden items-center gap-8 text-sm font-medium text-zinc-600 md:flex dark:text-zinc-300">
-          <a href="#how-it-works" className="transition hover:text-zinc-950 dark:hover:text-white">
+          <a
+            href="#how-it-works"
+            className="transition hover:text-zinc-950 dark:hover:text-white"
+          >
             How it works
           </a>
 
-          <a href="#paths" className="transition hover:text-zinc-950 dark:hover:text-white">
+          <a
+            href="#paths"
+            className="transition hover:text-zinc-950 dark:hover:text-white"
+          >
             What we help with
           </a>
 
@@ -105,21 +111,21 @@ export default function Home() {
             </h1>
 
             <p className="mt-7 max-w-xl text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-              SECONDSPARK helps you understand what to do with an old,
-              damaged, or unwanted electronic device — from repair and reuse
-              to secure data erasure and responsible recycling.
+              SECONDSPARK helps you understand what to do with an old, damaged,
+              or unwanted electronic device — from repair and reuse to secure
+              data erasure and responsible recycling.
             </p>
 
             <div className="mt-9 flex flex-col gap-4 sm:flex-row">
-              <a
-                href="#assessment"
+              <Link
+                href="/assess"
                 className="group inline-flex h-14 items-center justify-center gap-3 rounded-full bg-zinc-900 px-7 font-semibold text-white shadow-xl shadow-zinc-900/10 transition hover:-translate-y-0.5 hover:bg-zinc-700 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
               >
                 Assess My Device
                 <span className="transition-transform group-hover:translate-x-1">
                   →
                 </span>
-              </a>
+              </Link>
 
               <a
                 href="#how-it-works"
@@ -304,8 +310,8 @@ export default function Home() {
           </h2>
 
           <p className="mx-auto mt-5 max-w-xl leading-7 text-zinc-400 dark:text-zinc-500">
-            Start with a simple assessment. We'll build the intelligence
-            behind this experience next.
+            Start with a simple assessment. We'll build the intelligence behind
+            this experience next.
           </p>
 
           <button
