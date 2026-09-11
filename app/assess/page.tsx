@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
+import { useState } from "react";
 
 type DeviceType =
   | "Laptop"
@@ -36,30 +36,104 @@ interface AssessmentData {
   intent: Intent | "";
 }
 
-const devices: DeviceType[] = [
-  "Laptop",
-  "Smartphone",
-  "Tablet",
-  "Desktop",
-  "Gaming Console",
-  "TV",
-  "Other",
+const devices: {
+  type: DeviceType;
+  icon: string;
+  description: string;
+}[] = [
+  {
+    type: "Laptop",
+    icon: "💻",
+    description: "Portable computers",
+  },
+  {
+    type: "Smartphone",
+    icon: "📱",
+    description: "Phones & mobile devices",
+  },
+  {
+    type: "Tablet",
+    icon: "📟",
+    description: "Tablets & e-readers",
+  },
+  {
+    type: "Desktop",
+    icon: "🖥️",
+    description: "Desktop computers",
+  },
+  {
+    type: "Gaming Console",
+    icon: "🎮",
+    description: "Consoles & gaming devices",
+  },
+  {
+    type: "TV",
+    icon: "📺",
+    description: "Televisions & displays",
+  },
+  {
+    type: "Other",
+    icon: "🔌",
+    description: "Other electronics",
+  },
 ];
 
-const conditions: Condition[] = [
-  "Works normally",
-  "Works with problems",
-  "Barely works",
-  "Doesn't work",
-  "Physically damaged",
+const conditions: {
+  value: Condition;
+  description: string;
+}[] = [
+  {
+    value: "Works normally",
+    description: "Everything works as expected.",
+  },
+  {
+    value: "Works with problems",
+    description: "It works, but something isn't right.",
+  },
+  {
+    value: "Barely works",
+    description: "It works occasionally or very slowly.",
+  },
+  {
+    value: "Doesn't work",
+    description: "It won't turn on or function.",
+  },
+  {
+    value: "Physically damaged",
+    description: "Cracked, broken, dented, or visibly damaged.",
+  },
 ];
 
-const intents: Intent[] = [
-  "Keep using it",
-  "Repair it",
-  "Sell / donate it",
-  "Recycle it",
-  "I'm not sure",
+const intents: {
+  value: Intent;
+  icon: string;
+  description: string;
+}[] = [
+  {
+    value: "Keep using it",
+    icon: "♻️",
+    description: "I want to keep using it.",
+  },
+  {
+    value: "Repair it",
+    icon: "🔧",
+    description: "I'd like to fix it.",
+  },
+  {
+    value: "Sell / donate it",
+    icon: "🤝",
+    description: "I want someone else to use it.",
+  },
+  {
+    value: "Recycle it",
+    icon: "🌱",
+    description: "I think it's ready for recycling.",
+  },
+  {
+    value: "I'm not sure",
+    icon: "✨",
+    description: "Help me decide.",
+  },
 ];
 
 export default function AssessPage() {
@@ -75,28 +149,41 @@ export default function AssessPage() {
     intent: "",
   });
 
-  const updateData = (field: keyof AssessmentData, value: string) => {
+  const updateData = <K extends keyof AssessmentData>(
+    field: K,
+    value: AssessmentData[K]
+  ) => {
     setData((previous) => ({
       ...previous,
       [field]: value,
     }));
   };
 
-  const nextStep = () => {
-    if (step < 4) {
-      setStep((previous) => previous + 1);
+  const canContinue = () => {
+    if (step === 1) return Boolean(data.deviceType);
+
+    if (step === 2) {
+      return Boolean(data.brand.trim() && data.model.trim() && data.age.trim());
     }
+
+    if (step === 3) return Boolean(data.condition);
+
+    if (step === 4) return Boolean(data.intent);
+
+    return false;
+  };
+
+  const nextStep = () => {
+    if (!canContinue()) return;
+
+    setStep((previous) => Math.min(previous + 1, 5));
   };
 
   const previousStep = () => {
-    if (step > 1) {
-      setStep((previous) => previous - 1);
-    }
+    setStep((previous) => Math.max(previous - 1, 1));
   };
 
   const resetAssessment = () => {
-    setStep(1);
-
     setData({
       deviceType: "",
       brand: "",
@@ -106,112 +193,184 @@ export default function AssessPage() {
       problem: "",
       intent: "",
     });
+
+    setStep(1);
   };
 
   return (
     <main className="min-h-screen bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">
-      {/* Header */}
-      <header className="border-b border-zinc-100 dark:border-zinc-900">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-900 text-sm dark:bg-white">
-              ⚡
-            </div>
+      <AssessmentHeader step={step} />
 
-            <span className="font-bold tracking-tight">SECONDSPARK</span>
-          </Link>
+      {step <= 4 && (
+        <ProgressIndicator
+          currentStep={step}
+          totalSteps={4}
+        />
+      )}
 
-          <div className="text-sm text-zinc-500">
-            Assessment {step} of 4
+      {step <= 4 ? (
+        <section className="mx-auto flex min-h-[calc(100vh-145px)] max-w-5xl flex-col px-5 py-10 sm:px-8 sm:py-14">
+          <div className="flex-1">
+            {step === 1 && (
+              <DeviceStep
+                value={data.deviceType}
+                onChange={(value) =>
+                  updateData("deviceType", value)
+                }
+              />
+            )}
+
+            {step === 2 && (
+              <DetailsStep
+                data={data}
+                updateData={updateData}
+              />
+            )}
+
+            {step === 3 && (
+              <ConditionStep
+                value={data.condition}
+                problem={data.problem}
+                updateData={updateData}
+              />
+            )}
+
+            {step === 4 && (
+              <IntentStep
+                value={data.intent}
+                onChange={(value) =>
+                  updateData("intent", value)
+                }
+              />
+            )}
           </div>
-        </div>
-      </header>
 
-      {/* Progress */}
-      <div className="border-b border-zinc-100 dark:border-zinc-900">
-        <div className="mx-auto max-w-5xl px-6 py-4">
-          <div className="h-1.5 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
-            <div
-              className="h-full rounded-full bg-emerald-500 transition-all duration-500"
-              style={{ width: `${(step / 4) * 100}%` }}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Main */}
-      <section className="mx-auto flex min-h-[calc(100vh-130px)] max-w-3xl flex-col px-6 py-12">
-        {step === 1 && (
-          <StepOne
-            value={data.deviceType}
-            onChange={(value) => updateData("deviceType", value)}
+          <AssessmentNavigation
+            step={step}
+            canContinue={canContinue()}
+            onBack={previousStep}
+            onNext={nextStep}
           />
-        )}
-
-        {step === 2 && (
-          <StepTwo
-            data={data}
-            updateData={updateData}
-          />
-        )}
-
-        {step === 3 && (
-          <StepThree
-            data={data}
-            updateData={updateData}
-          />
-        )}
-
-        {step === 4 && (
-          <StepFour
-            value={data.intent}
-            onChange={(value) => updateData("intent", value)}
-          />
-        )}
-
-        <div className="mt-auto flex items-center justify-between border-t border-zinc-100 pt-8 dark:border-zinc-900">
-          <button
-            type="button"
-            onClick={previousStep}
-            disabled={step === 1}
-            className="rounded-full border border-zinc-200 px-6 py-3 text-sm font-semibold transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-zinc-800 dark:hover:bg-zinc-900"
-          >
-            ← Back
-          </button>
-
-          {step < 4 ? (
-            <button
-              type="button"
-              onClick={nextStep}
-              className="rounded-full bg-zinc-900 px-7 py-3 text-sm font-semibold text-white transition hover:bg-zinc-700 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
-            >
-              Continue →
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setStep(5)}
-              className="rounded-full bg-emerald-600 px-7 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500"
-            >
-              Get My Assessment →
-            </button>
-          )}
-        </div>
-      </section>
-
-      {/* Result */}
-      {step === 5 && (
-        <AssessmentResult data={data} onReset={resetAssessment} />
+        </section>
+      ) : (
+        <AssessmentResult
+          data={data}
+          onReset={resetAssessment}
+        />
       )}
     </main>
   );
 }
 
-/* ------------------------------------------------ */
-/* Step 1 */
-/* ------------------------------------------------ */
+/* ================================================= */
+/* HEADER */
+/* ================================================= */
 
-function StepOne({
+function AssessmentHeader({ step }: { step: number }) {
+  return (
+    <header className="border-b border-zinc-100 dark:border-zinc-900">
+      <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-5 sm:px-8">
+        <Link href="/" className="group flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-900 text-base shadow-lg transition group-hover:-translate-y-0.5 dark:bg-white">
+            <span className="dark:invert">⚡</span>
+          </div>
+
+          <div>
+            <p className="font-bold tracking-tight">
+              SECONDSPARK
+            </p>
+
+            <p className="hidden text-[10px] font-medium uppercase tracking-[0.2em] text-zinc-400 sm:block">
+              Device assessment
+            </p>
+          </div>
+        </Link>
+
+        <div className="text-right">
+          <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">
+            {step <= 4 ? "Assessment" : "Complete"}
+          </p>
+
+          <p className="mt-0.5 text-sm font-semibold">
+            {step <= 4 ? `${step} / 4` : "✓"}
+          </p>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+/* ================================================= */
+/* PROGRESS */
+/* ================================================= */
+
+function ProgressIndicator({
+  currentStep,
+  totalSteps,
+}: {
+  currentStep: number;
+  totalSteps: number;
+}) {
+  const labels = ["Device", "Details", "Condition", "Intent"];
+
+  return (
+    <div className="border-b border-zinc-100 dark:border-zinc-900">
+      <div className="mx-auto max-w-5xl px-5 py-5 sm:px-8">
+        <div className="flex items-center">
+          {labels.map((label, index) => {
+            const number = index + 1;
+            const active = number <= currentStep;
+
+            return (
+              <div
+                key={label}
+                className="flex flex-1 items-center"
+              >
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition ${
+                      active
+                        ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950"
+                        : "bg-zinc-100 text-zinc-400 dark:bg-zinc-900"
+                    }`}
+                  >
+                    {number < currentStep ? "✓" : number}
+                  </div>
+
+                  <span
+                    className={`hidden text-xs font-medium sm:block ${
+                      active
+                        ? "text-zinc-900 dark:text-white"
+                        : "text-zinc-400"
+                    }`}
+                  >
+                    {label}
+                  </span>
+                </div>
+
+                {number !== totalSteps && (
+                  <div
+                    className={`mx-3 h-px flex-1 transition ${
+                      number < currentStep
+                        ? "bg-zinc-900 dark:bg-white"
+                        : "bg-zinc-200 dark:bg-zinc-800"
+                    }`}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ================================================= */
+/* STEP 1 */
+/* ================================================= */
+
+function DeviceStep({
   value,
   onChange,
 }: {
@@ -219,63 +378,73 @@ function StepOne({
   onChange: (value: DeviceType) => void;
 }) {
   return (
-    <div>
-      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-600">
-        Step 01
-      </p>
+    <div className="animate-[fadeIn_.35s_ease-out]">
+      <StepHeading
+        eyebrow="01 — Device"
+        title="What are we giving a second chance?"
+        description="Choose the type of electronic device you want SECONDSPARK to assess."
+      />
 
-      <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl">
-        What device are you assessing?
-      </h1>
-
-      <p className="mt-4 text-lg leading-7 text-zinc-500">
-        Start with the basics. Choose the device you want SECONDSPARK to
-        evaluate.
-      </p>
-
-      <div className="mt-10 grid gap-4 sm:grid-cols-2">
+      <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {devices.map((device) => (
-          <OptionCard
-            key={device}
-            selected={value === device}
-            onClick={() => onChange(device)}
-            icon={getDeviceIcon(device)}
-            title={device}
-          />
+          <button
+            key={device.type}
+            type="button"
+            onClick={() => onChange(device.type)}
+            className={`group relative overflow-hidden rounded-3xl border p-6 text-left transition duration-200 ${
+              value === device.type
+                ? "border-emerald-500 bg-emerald-50 shadow-lg shadow-emerald-500/10 dark:bg-emerald-950/20"
+                : "border-zinc-200 bg-white hover:-translate-y-1 hover:border-zinc-300 hover:shadow-xl dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700"
+            }`}
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100 text-2xl transition group-hover:scale-105 dark:bg-zinc-900">
+                {device.icon}
+              </div>
+
+              <SelectionIndicator selected={value === device.type} />
+            </div>
+
+            <h2 className="mt-6 font-semibold">
+              {device.type}
+            </h2>
+
+            <p className="mt-1 text-sm text-zinc-500">
+              {device.description}
+            </p>
+          </button>
         ))}
       </div>
     </div>
   );
 }
 
-/* ------------------------------------------------ */
-/* Step 2 */
-/* ------------------------------------------------ */
+/* ================================================= */
+/* STEP 2 */
+/* ================================================= */
 
-function StepTwo({
+function DetailsStep({
   data,
   updateData,
 }: {
   data: AssessmentData;
-  updateData: (field: keyof AssessmentData, value: string) => void;
+  updateData: <K extends keyof AssessmentData>(
+    field: K,
+    value: AssessmentData[K]
+  ) => void;
 }) {
   return (
     <div>
-      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-600">
-        Step 02
-      </p>
+      <StepHeading
+        eyebrow="02 — Details"
+        title="Tell us a little more."
+        description="These details help us understand the device and make a more useful recommendation."
+      />
 
-      <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl">
-        Tell us about your device.
-      </h1>
-
-      <p className="mt-4 text-lg leading-7 text-zinc-500">
-        A little more information helps us make a better assessment.
-      </p>
-
-      <div className="mt-10 space-y-6">
+      <div className="mt-10 grid gap-6 sm:grid-cols-2">
         <Input
           label="Brand"
+          required
           placeholder="e.g. HP, Apple, Samsung"
           value={data.brand}
           onChange={(value) => updateData("brand", value)}
@@ -283,6 +452,7 @@ function StepTwo({
 
         <Input
           label="Model"
+          required
           placeholder="e.g. Pavilion 15, iPhone 13"
           value={data.model}
           onChange={(value) => updateData("model", value)}
@@ -290,92 +460,115 @@ function StepTwo({
 
         <Input
           label="Approximate age"
+          required
           placeholder="e.g. 3 years"
           value={data.age}
           onChange={(value) => updateData("age", value)}
         />
       </div>
+
+      <div className="mt-8 rounded-2xl border border-blue-100 bg-blue-50 p-5 dark:border-blue-900/30 dark:bg-blue-950/20">
+        <div className="flex gap-3">
+          <span className="text-lg">💡</span>
+
+          <div>
+            <p className="text-sm font-semibold">
+              Why do we ask?
+            </p>
+
+            <p className="mt-1 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+              Device age, model, and condition can influence whether
+              repair, continued use, or recycling makes the most sense.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-/* ------------------------------------------------ */
-/* Step 3 */
-/* ------------------------------------------------ */
+/* ================================================= */
+/* STEP 3 */
+/* ================================================= */
 
-function StepThree({
-  data,
+function ConditionStep({
+  value,
+  problem,
   updateData,
 }: {
-  data: AssessmentData;
-  updateData: (field: keyof AssessmentData, value: string) => void;
+  value: Condition | "";
+  problem: string;
+  updateData: <K extends keyof AssessmentData>(
+    field: K,
+    value: AssessmentData[K]
+  ) => void;
 }) {
   return (
     <div>
-      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-600">
-        Step 03
-      </p>
-
-      <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl">
-        What's the condition?
-      </h1>
-
-      <p className="mt-4 text-lg leading-7 text-zinc-500">
-        Be honest here. There are no wrong answers.
-      </p>
+      <StepHeading
+        eyebrow="03 — Condition"
+        title="How is it doing?"
+        description="Tell us what the device is like today. An honest answer gives us a better starting point."
+      />
 
       <div className="mt-10 space-y-3">
         {conditions.map((condition) => (
           <button
-            key={condition}
+            key={condition.value}
             type="button"
-            onClick={() => updateData("condition", condition)}
-            className={`flex w-full items-center justify-between rounded-2xl border p-5 text-left transition ${
-              data.condition === condition
-                ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20"
-                : "border-zinc-200 hover:border-zinc-400 dark:border-zinc-800 dark:hover:border-zinc-600"
+            onClick={() =>
+              updateData("condition", condition.value)
+            }
+            className={`flex w-full items-center gap-5 rounded-2xl border p-5 text-left transition ${
+              value === condition.value
+                ? "border-amber-500 bg-amber-50 dark:bg-amber-950/20"
+                : "border-zinc-200 hover:border-zinc-300 hover:shadow-sm dark:border-zinc-800 dark:hover:border-zinc-700"
             }`}
           >
-            <span className="font-medium">{condition}</span>
+            <SelectionIndicator
+              selected={value === condition.value}
+            />
 
-            <span
-              className={`flex h-5 w-5 items-center justify-center rounded-full border ${
-                data.condition === condition
-                  ? "border-emerald-500 bg-emerald-500 text-white"
-                  : "border-zinc-300 dark:border-zinc-700"
-              }`}
-            >
-              {data.condition === condition && "✓"}
-            </span>
+            <div>
+              <p className="font-semibold">
+                {condition.value}
+              </p>
+
+              <p className="mt-1 text-sm text-zinc-500">
+                {condition.description}
+              </p>
+            </div>
           </button>
         ))}
       </div>
 
       <div className="mt-8">
         <label className="text-sm font-semibold">
-          What seems to be wrong?
-          <span className="ml-2 font-normal text-zinc-400">(optional)</span>
+          What's wrong with it?
+          <span className="ml-2 font-normal text-zinc-400">
+            Optional
+          </span>
         </label>
 
         <textarea
-          value={data.problem}
+          value={problem}
           onChange={(event) =>
             updateData("problem", event.target.value)
           }
-          placeholder="Describe any problems, damage, unusual behavior, or anything you've noticed..."
-          rows={5}
-          className="mt-3 w-full resize-none rounded-2xl border border-zinc-200 bg-white p-4 text-sm outline-none transition placeholder:text-zinc-400 focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-900"
+          placeholder="Battery problems, cracked screen, overheating, slow performance..."
+          rows={4}
+          className="mt-3 w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-4 text-sm outline-none transition placeholder:text-zinc-400 focus:border-zinc-500 focus:ring-4 focus:ring-zinc-100 dark:border-zinc-800 dark:bg-zinc-950 dark:focus:ring-zinc-900"
         />
       </div>
     </div>
   );
 }
 
-/* ------------------------------------------------ */
-/* Step 4 */
-/* ------------------------------------------------ */
+/* ================================================= */
+/* STEP 4 */
+/* ================================================= */
 
-function StepFour({
+function IntentStep({
   value,
   onChange,
 }: {
@@ -384,41 +577,41 @@ function StepFour({
 }) {
   return (
     <div>
-      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-purple-600">
-        Step 04
-      </p>
+      <StepHeading
+        eyebrow="04 — Intent"
+        title="What would you like to do?"
+        description="Don't worry if you're unsure. That's exactly what SECONDSPARK is here to help with."
+      />
 
-      <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl">
-        What are you thinking of doing with it?
-      </h1>
-
-      <p className="mt-4 text-lg leading-7 text-zinc-500">
-        Your intention helps us understand what guidance will be most useful.
-      </p>
-
-      <div className="mt-10 space-y-3">
+      <div className="mt-10 grid gap-4 sm:grid-cols-2">
         {intents.map((intent) => (
           <button
-            key={intent}
+            key={intent.value}
             type="button"
-            onClick={() => onChange(intent)}
-            className={`flex w-full items-center justify-between rounded-2xl border p-5 text-left transition ${
-              value === intent
-                ? "border-purple-500 bg-purple-50 dark:bg-purple-950/20"
-                : "border-zinc-200 hover:border-zinc-400 dark:border-zinc-800 dark:hover:border-zinc-600"
+            onClick={() => onChange(intent.value)}
+            className={`group rounded-3xl border p-6 text-left transition ${
+              value === intent.value
+                ? "border-purple-500 bg-purple-50 shadow-lg shadow-purple-500/10 dark:bg-purple-950/20"
+                : "border-zinc-200 hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-lg dark:border-zinc-800 dark:hover:border-zinc-700"
             }`}
           >
-            <span className="font-medium">{intent}</span>
+            <div className="flex items-center justify-between">
+              <span className="text-2xl">
+                {intent.icon}
+              </span>
 
-            <span
-              className={`flex h-5 w-5 items-center justify-center rounded-full border ${
-                value === intent
-                  ? "border-purple-500 bg-purple-500 text-white"
-                  : "border-zinc-300 dark:border-zinc-700"
-              }`}
-            >
-              {value === intent && "✓"}
-            </span>
+              <SelectionIndicator
+                selected={value === intent.value}
+              />
+            </div>
+
+            <p className="mt-6 font-semibold">
+              {intent.value}
+            </p>
+
+            <p className="mt-1 text-sm text-zinc-500">
+              {intent.description}
+            </p>
           </button>
         ))}
       </div>
@@ -426,9 +619,57 @@ function StepFour({
   );
 }
 
-/* ------------------------------------------------ */
-/* Result */
-/* ------------------------------------------------ */
+/* ================================================= */
+/* NAVIGATION */
+/* ================================================= */
+
+function AssessmentNavigation({
+  step,
+  canContinue,
+  onBack,
+  onNext,
+}: {
+  step: number;
+  canContinue: boolean;
+  onBack: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="mt-12 flex items-center justify-between border-t border-zinc-100 pt-6 dark:border-zinc-900">
+      <button
+        type="button"
+        onClick={onBack}
+        disabled={step === 1}
+        className="rounded-full px-5 py-3 text-sm font-semibold text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 disabled:pointer-events-none disabled:opacity-0 dark:hover:bg-zinc-900 dark:hover:text-white"
+      >
+        ← Back
+      </button>
+
+      <div className="flex items-center gap-4">
+        {!canContinue && (
+          <span className="hidden text-xs text-zinc-400 sm:block">
+            Complete this step to continue
+          </span>
+        )}
+
+        <button
+          type="button"
+          onClick={onNext}
+          disabled={!canContinue}
+          className="rounded-full bg-zinc-900 px-7 py-3 text-sm font-semibold text-white shadow-lg shadow-zinc-900/10 transition hover:-translate-y-0.5 hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+        >
+          {step === 4
+            ? "Get My Assessment →"
+            : "Continue →"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ================================================= */
+/* RESULT */
+/* ================================================= */
 
 function AssessmentResult({
   data,
@@ -440,152 +681,227 @@ function AssessmentResult({
   const recommendation = calculateRecommendation(data);
 
   return (
-    <section className="mx-auto max-w-3xl px-6 pb-20">
-      <div className="rounded-[2rem] border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-800 dark:bg-zinc-900 sm:p-10">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-600">
-          Assessment complete
-        </p>
+    <section className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-16">
+      <div className="overflow-hidden rounded-[2rem] border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="p-7 sm:p-10">
+          <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-start">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-semibold text-emerald-600">
+                <span>✓</span>
+                Assessment complete
+              </div>
 
-        <h1 className="mt-4 text-4xl font-bold tracking-tight">
-          Your SECONDSPARK recommendation
-        </h1>
+              <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-5xl">
+                Your device has options.
+              </h1>
 
-        <div className="mt-8 rounded-3xl bg-white p-6 shadow-sm dark:bg-zinc-950">
-          <div className="text-4xl">
-            {recommendation.icon}
+              <p className="mt-4 max-w-2xl leading-7 text-zinc-500">
+                Based on the information you provided, here's the
+                direction we recommend starting with.
+              </p>
+            </div>
+
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white text-3xl shadow-sm dark:bg-zinc-950">
+              {getDeviceIcon(data.deviceType)}
+            </div>
           </div>
 
-          <p className="mt-5 text-sm font-semibold uppercase tracking-wider text-zinc-400">
-            Recommended path
-          </p>
+          <div className="mt-10 grid gap-5 lg:grid-cols-[1.2fr_.8fr]">
+            <div className="rounded-3xl bg-white p-7 shadow-sm dark:bg-zinc-950 sm:p-8">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">
+                Recommended path
+              </p>
 
-          <h2 className="mt-2 text-3xl font-bold">
-            {recommendation.title}
-          </h2>
+              <div className="mt-5 flex items-start gap-4">
+                <span className="text-4xl">
+                  {recommendation.icon}
+                </span>
 
-          <p className="mt-4 leading-7 text-zinc-500">
-            {recommendation.description}
-          </p>
-        </div>
+                <div>
+                  <h2 className="text-2xl font-bold sm:text-3xl">
+                    {recommendation.title}
+                  </h2>
 
-        <div className="mt-5 rounded-3xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
-          <h3 className="font-semibold">Your device</h3>
+                  <p className="mt-3 leading-7 text-zinc-500">
+                    {recommendation.description}
+                  </p>
+                </div>
+              </div>
+            </div>
 
-          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-            <Info label="Device" value={data.deviceType} />
-            <Info label="Brand" value={data.brand || "Not provided"} />
-            <Info label="Model" value={data.model || "Not provided"} />
-            <Info label="Age" value={data.age || "Not provided"} />
-            <Info
-              label="Condition"
-              value={data.condition || "Not provided"}
-            />
-            <Info label="Intent" value={data.intent || "Not provided"} />
+            <div className="rounded-3xl border border-zinc-200 bg-white p-7 dark:border-zinc-800 dark:bg-zinc-950">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">
+                Assessment summary
+              </p>
+
+              <div className="mt-5 space-y-4">
+                <SummaryRow
+                  label="Device"
+                  value={data.deviceType}
+                />
+
+                <SummaryRow
+                  label="Brand"
+                  value={data.brand}
+                />
+
+                <SummaryRow
+                  label="Model"
+                  value={data.model}
+                />
+
+                <SummaryRow
+                  label="Condition"
+                  value={data.condition}
+                />
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-          <button
-            type="button"
-            onClick={onReset}
-            className="rounded-full border border-zinc-200 px-6 py-3 text-sm font-semibold transition hover:bg-white dark:border-zinc-800 dark:hover:bg-zinc-950"
-          >
-            Start another assessment
-          </button>
+          <div className="mt-6 rounded-3xl border border-emerald-100 bg-emerald-50 p-6 dark:border-emerald-900/30 dark:bg-emerald-950/20">
+            <div className="flex gap-4">
+              <span className="text-xl">🌱</span>
 
-          <Link
-            href="/"
-            className="rounded-full bg-zinc-900 px-6 py-3 text-center text-sm font-semibold text-white transition hover:bg-zinc-700 dark:bg-white dark:text-zinc-950"
-          >
-            Back to SECONDSPARK
-          </Link>
+              <div>
+                <h3 className="font-semibold">
+                  Remember the SECONDSPARK principle
+                </h3>
+
+                <p className="mt-1 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+                  Reuse and repair should be considered before
+                  disposal whenever practical. If recycling becomes
+                  the right choice, protect your data first.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={onReset}
+              className="rounded-full border border-zinc-200 px-6 py-3 text-sm font-semibold transition hover:bg-white dark:border-zinc-800 dark:hover:bg-zinc-950"
+            >
+              Start another assessment
+            </button>
+
+            <Link
+              href="/"
+              className="rounded-full bg-zinc-900 px-6 py-3 text-center text-sm font-semibold text-white transition hover:bg-zinc-700 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+            >
+              Back to SECONDSPARK
+            </Link>
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
-/* ------------------------------------------------ */
-/* Reusable UI */
-/* ------------------------------------------------ */
+/* ================================================= */
+/* REUSABLE COMPONENTS */
+/* ================================================= */
 
-function OptionCard({
-  selected,
-  onClick,
-  icon,
+function StepHeading({
+  eyebrow,
   title,
+  description,
 }: {
-  selected: boolean;
-  onClick: () => void;
-  icon: string;
+  eyebrow: string;
   title: string;
+  description: string;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-3xl border p-6 text-left transition ${
+    <div className="max-w-3xl">
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">
+        {eyebrow}
+      </p>
+
+      <h1 className="mt-4 text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
+        {title}
+      </h1>
+
+      <p className="mt-4 max-w-2xl text-base leading-7 text-zinc-500 sm:text-lg">
+        {description}
+      </p>
+    </div>
+  );
+}
+
+function SelectionIndicator({
+  selected,
+}: {
+  selected: boolean;
+}) {
+  return (
+    <span
+      className={`flex h-5 w-5 items-center justify-center rounded-full border text-[10px] font-bold transition ${
         selected
-          ? "border-emerald-500 bg-emerald-50 shadow-sm dark:bg-emerald-950/20"
-          : "border-zinc-200 hover:-translate-y-0.5 hover:border-zinc-400 hover:shadow-lg dark:border-zinc-800 dark:hover:border-zinc-600"
+          ? "border-emerald-500 bg-emerald-500 text-white"
+          : "border-zinc-300 dark:border-zinc-700"
       }`}
     >
-      <div className="flex items-center justify-between">
-        <span className="text-3xl">{icon}</span>
-
-        <span
-          className={`flex h-5 w-5 items-center justify-center rounded-full border ${
-            selected
-              ? "border-emerald-500 bg-emerald-500 text-white"
-              : "border-zinc-300 dark:border-zinc-700"
-          }`}
-        >
-          {selected && "✓"}
-        </span>
-      </div>
-
-      <p className="mt-6 font-semibold">{title}</p>
-    </button>
+      {selected && "✓"}
+    </span>
   );
 }
 
 function Input({
   label,
+  required,
   placeholder,
   value,
   onChange,
 }: {
   label: string;
+  required?: boolean;
   placeholder: string;
   value: string;
   onChange: (value: string) => void;
 }) {
   return (
     <div>
-      <label className="text-sm font-semibold">{label}</label>
+      <label className="text-sm font-semibold">
+        {label}
+
+        {required && (
+          <span className="ml-1 text-emerald-600">*</span>
+        )}
+      </label>
 
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="mt-3 w-full rounded-2xl border border-zinc-200 bg-white px-4 py-4 text-sm outline-none transition placeholder:text-zinc-400 focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-900"
+        className="mt-3 w-full rounded-2xl border border-zinc-200 bg-white px-4 py-4 text-sm outline-none transition placeholder:text-zinc-400 focus:border-zinc-500 focus:ring-4 focus:ring-zinc-100 dark:border-zinc-800 dark:bg-zinc-950 dark:focus:ring-zinc-900"
       />
     </div>
   );
 }
 
-function Info({ label, value }: { label: string; value: string }) {
+function SummaryRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
   return (
-    <div className="rounded-xl bg-zinc-50 p-3 dark:bg-zinc-900">
-      <p className="text-xs text-zinc-400">{label}</p>
-      <p className="mt-1 font-medium">{value}</p>
+    <div className="flex items-center justify-between gap-4 border-b border-zinc-100 pb-3 last:border-0 last:pb-0 dark:border-zinc-900">
+      <span className="text-sm text-zinc-400">
+        {label}
+      </span>
+
+      <span className="text-right text-sm font-semibold">
+        {value || "Not provided"}
+      </span>
     </div>
   );
 }
 
-/* ------------------------------------------------ */
-/* Assessment Logic */
-/* ------------------------------------------------ */
+/* ================================================= */
+/* ASSESSMENT ENGINE — TEMPORARY */
+/* ================================================= */
 
 function calculateRecommendation(data: AssessmentData) {
   if (
@@ -597,7 +913,7 @@ function calculateRecommendation(data: AssessmentData) {
       icon: "♻️",
       title: "Keep using / Reuse",
       description:
-        "Your device appears to be functioning normally. The most sustainable option is to continue using it rather than replacing it.",
+        "Your device appears to be functioning normally. Continuing to use it is likely the most sustainable option.",
     };
   }
 
@@ -618,7 +934,7 @@ function calculateRecommendation(data: AssessmentData) {
       icon: "🌱",
       title: "Evaluate → Recycle",
       description:
-        "The device is currently non-functional. Consider whether repair is practical; if not, responsible recycling may be the best option.",
+        "The device is currently non-functional. Consider whether repair is practical; if not, responsible recycling may be the better option.",
     };
   }
 
@@ -632,18 +948,14 @@ function calculateRecommendation(data: AssessmentData) {
   }
 
   return {
-    icon: "🌱",
+    icon: "✨",
     title: "Assess → Choose Responsibly",
     description:
-      "We need a little more information before making a strong recommendation. Consider the device's condition, repairability, and intended use.",
+      "More information may be needed before making a strong recommendation.",
   };
 }
 
-/* ------------------------------------------------ */
-/* Helpers */
-/* ------------------------------------------------ */
-
-function getDeviceIcon(device: DeviceType) {
+function getDeviceIcon(device: DeviceType | "") {
   switch (device) {
     case "Laptop":
       return "💻";
