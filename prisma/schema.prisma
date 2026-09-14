@@ -37,13 +37,14 @@ model Device {
 }
 
 model Assessment {
-  id          String           @id @default(cuid())
-  deviceId    String
-  condition   DeviceCondition?
-  userIntent  UserIntent?
-  status      AssessmentStatus @default(IN_PROGRESS)
-  createdAt   DateTime         @default(now())
-  completedAt DateTime?
+  id                String           @id @default(cuid())
+  deviceId          String
+  condition         DeviceCondition?
+  userIntent        UserIntent?
+  problemDescription String?
+  status            AssessmentStatus @default(IN_PROGRESS)
+  createdAt         DateTime         @default(now())
+  completedAt       DateTime?
 
   device         Device             @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   images         AssessmentImage[]

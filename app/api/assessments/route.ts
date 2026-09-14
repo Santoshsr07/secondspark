@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/app/lib/prisma";
+import { generateRecommendation } from "@/app/lib/assessment-engine";
 
 const assessmentSchema = z.object({
   userEmail: z.string().email(),
   userName: z.string().min(1).max(100).optional(),
+  problemDescription: z.string().optional(),
 
   device: z.object({
     type: z.enum([
@@ -37,13 +39,7 @@ const assessmentSchema = z.object({
     .optional(),
 
   userIntent: z
-    .enum([
-      "KEEP_USING",
-      "REPAIR",
-      "SELL_OR_DONATE",
-      "RECYCLE",
-      "NOT_SURE",
-    ])
+    .enum(["KEEP_USING", "REPAIR", "SELL_OR_DONATE", "RECYCLE", "NOT_SURE"])
     .optional(),
 });
 
@@ -54,13 +50,15 @@ export async function POST(request: Request) {
     const result = assessmentSchema.safeParse(body);
 
     if (!result.success) {
+      console.error("Assessment validation failed:", result.error.flatten());
+
       return NextResponse.json(
         {
           success: false,
           error: "Invalid assessment data",
           details: result.error.flatten(),
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -89,14 +87,33 @@ export async function POST(request: Request) {
       },
     });
 
+    const recommendation = generateRecommendation({
+      deviceType: data.device.type,
+      condition: data.condition,
+      userIntent: data.userIntent,
+    });
+
     const assessment = await prisma.assessment.create({
       data: {
         deviceId: device.id,
         condition: data.condition,
         userIntent: data.userIntent,
+        problemDescription: data.problemDescription,
+        status: "COMPLETED",
+        completedAt: new Date(),
+
+        recommendations: {
+          create: {
+            action: recommendation.action,
+            priority: recommendation.priority,
+            reason: recommendation.reason,
+            dataSafetyRequired: recommendation.dataSafetyRequired,
+          },
+        },
       },
       include: {
         device: true,
+        recommendations: true,
       },
     });
 
@@ -105,7 +122,7 @@ export async function POST(request: Request) {
         success: true,
         assessment,
       },
-      { status: 201 }
+      { status: 201 },
     );
   } catch (error) {
     console.error("Assessment creation failed:", error);
@@ -115,7 +132,7 @@ export async function POST(request: Request) {
         success: false,
         error: "Failed to create assessment",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

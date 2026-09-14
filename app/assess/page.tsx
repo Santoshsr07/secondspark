@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { ChangeEvent, useState } from "react";
 
 type DeviceType =
   | "Laptop"
@@ -30,11 +30,25 @@ interface AssessmentData {
   deviceType: DeviceType | "";
   brand: string;
   model: string;
-  age: string;
+  purchaseYear: string;
   condition: Condition | "";
   problem: string;
   intent: Intent | "";
 }
+
+type AssessmentRecommendation = {
+  action:
+    | "KEEP_USING"
+    | "REPAIR"
+    | "REUSE"
+    | "SELL_OR_DONATE"
+    | "DATA_ERASURE"
+    | "RECYCLE"
+    | "EVALUATE";
+  priority: "LOW" | "MEDIUM" | "HIGH";
+  reason: string;
+  dataSafetyRequired: boolean;
+};
 
 const devices: {
   type: DeviceType;
@@ -141,11 +155,17 @@ export default function AssessPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
+  const [deviceImage, setDeviceImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState("");
+
+  const [recommendation, setRecommendation] =
+    useState<AssessmentRecommendation | null>(null);
+
   const [data, setData] = useState<AssessmentData>({
     deviceType: "",
     brand: "",
     model: "",
-    age: "",
+    purchaseYear: "",
     condition: "",
     problem: "",
     intent: "",
@@ -165,7 +185,16 @@ export default function AssessPage() {
     if (step === 1) return Boolean(data.deviceType);
 
     if (step === 2) {
-      return Boolean(data.brand.trim() && data.model.trim() && data.age.trim());
+      const purchaseYear = Number(data.purchaseYear);
+      const currentYear = new Date().getFullYear();
+
+      return Boolean(
+        data.brand.trim() &&
+        data.model.trim() &&
+        data.purchaseYear.trim() &&
+        purchaseYear >= 1970 &&
+        purchaseYear <= currentYear,
+      );
     }
 
     if (step === 3) return Boolean(data.condition);
@@ -175,14 +204,52 @@ export default function AssessPage() {
     return false;
   };
 
+  const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setSubmitError("Please select a valid image file.");
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setSubmitError("Image must be smaller than 10 MB.");
+      return;
+    }
+
+    if (imagePreview) {
+      URL.revokeObjectURL(imagePreview);
+    }
+
+    setDeviceImage(file);
+    setImagePreview(URL.createObjectURL(file));
+    setSubmitError("");
+
+    // Allow selecting the same file again
+    event.target.value = "";
+  };
+
+  const removeDeviceImage = () => {
+    if (imagePreview) {
+      URL.revokeObjectURL(imagePreview);
+    }
+
+    setDeviceImage(null);
+    setImagePreview("");
+  };
+
   const nextStep = async () => {
     if (!canContinue() || isSubmitting) return;
 
+    // Steps 1 → 2 → 3 → 4
     if (step < 4) {
       setStep((previous) => previous + 1);
       return;
     }
 
+    // Step 4 → submit assessment
     setIsSubmitting(true);
     setSubmitError("");
 
@@ -200,6 +267,7 @@ export default function AssessPage() {
         body: JSON.stringify({
           userEmail: "dev@secondspark.local",
           userName: "Development User",
+          problemDescription: data.problem.trim() || undefined,
 
           device: {
             type: {
@@ -215,8 +283,8 @@ export default function AssessPage() {
             brand: data.brand,
             model: data.model,
 
-            purchaseYear: data.age
-              ? new Date().getFullYear() - parseInt(data.age)
+            purchaseYear: data.purchaseYear
+              ? parseInt(data.purchaseYear)
               : undefined,
           },
 
@@ -244,10 +312,16 @@ export default function AssessPage() {
         throw new Error(result.error || "Failed to create assessment");
       }
 
-      console.log("Assessment created:", result);
+      const serverRecommendation = result.assessment?.recommendations?.[0];
 
+      if (!serverRecommendation) {
+        throw new Error("No recommendation was returned.");
+      }
+
+      setRecommendation(serverRecommendation);
       setStep(5);
-    } catch {
+    } catch (error) {
+      console.error("Assessment submission failed:", error);
       setSubmitError("We couldn't save your assessment. Please try again.");
     } finally {
       setIsSubmitting(false);
@@ -263,14 +337,23 @@ export default function AssessPage() {
       deviceType: "",
       brand: "",
       model: "",
-      age: "",
+      purchaseYear: "",
       condition: "",
       problem: "",
       intent: "",
     });
 
     setSubmitError("");
+
+    if (imagePreview) {
+      URL.revokeObjectURL(imagePreview);
+    }
+
+    setDeviceImage(null);
+    setImagePreview("");
+
     setIsSubmitting(false);
+    setRecommendation(null);
     setStep(1);
   };
 
@@ -290,7 +373,17 @@ export default function AssessPage() {
               />
             )}
 
-            {step === 2 && <DetailsStep data={data} updateData={updateData} />}
+            {step === 2 && (
+              <DetailsStep
+                data={data}
+                updateData={updateData}
+                deviceImage={deviceImage}
+                imagePreview={imagePreview}
+                onImageChange={handleImageChange}
+                onRemoveImage={removeDeviceImage}
+                imageError={submitError}
+              />
+            )}
 
             {step === 3 && (
               <ConditionStep
@@ -316,13 +409,13 @@ export default function AssessPage() {
             onBack={previousStep}
             onNext={nextStep}
           />
-
-          {submitError && step === 4 && (
-            <p className="text-xs font-medium text-red-500">{submitError}</p>
-          )}
         </section>
       ) : (
-        <AssessmentResult data={data} onReset={resetAssessment} />
+        <AssessmentResult
+          data={data}
+          recommendation={recommendation}
+          onReset={resetAssessment}
+        />
       )}
     </main>
   );
@@ -481,12 +574,22 @@ function DeviceStep({
 function DetailsStep({
   data,
   updateData,
+  deviceImage,
+  imagePreview,
+  onImageChange,
+  onRemoveImage,
+  imageError,
 }: {
   data: AssessmentData;
   updateData: <K extends keyof AssessmentData>(
     field: K,
     value: AssessmentData[K],
   ) => void;
+  deviceImage: File | null;
+  imagePreview: string;
+  onImageChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onRemoveImage: () => void;
+  imageError: string;
 }) {
   return (
     <div>
@@ -514,13 +617,87 @@ function DetailsStep({
         />
 
         <Input
-          label="Approximate age"
+          label="Purchase year"
           required
-          placeholder="e.g. 3 years"
-          value={data.age}
-          onChange={(value) => updateData("age", value)}
+          type="number"
+          placeholder="e.g. 2023"
+          value={data.purchaseYear}
+          onChange={(value) => updateData("purchaseYear", value)}
+          min="1970"
+          max={new Date().getFullYear().toString()}
         />
       </div>
+      <div className="mt-8">
+        <div>
+          <p className="text-sm font-semibold">
+            Add a photo of your device
+            <span className="ml-2 font-normal text-zinc-400">Optional</span>
+          </p>
+
+          <p className="mt-1 text-sm text-zinc-500">
+            A clear photo will help SECONDSPARK understand the device visually
+            in a future AI-powered assessment.
+          </p>
+        </div>
+
+        {imagePreview ? (
+          <div className="relative mt-4 overflow-hidden rounded-3xl border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900">
+            <img
+              src={imagePreview}
+              alt="Selected device"
+              className="h-64 w-full object-contain sm:h-80"
+            />
+
+            <div className="absolute right-4 top-4">
+              <button
+                type="button"
+                onClick={onRemoveImage}
+                className="rounded-full bg-white/90 px-4 py-2 text-xs font-semibold text-zinc-900 shadow-lg backdrop-blur transition hover:bg-white dark:bg-zinc-950/90 dark:text-white dark:hover:bg-zinc-950"
+              >
+                Remove
+              </button>
+            </div>
+
+            <div className="border-t border-zinc-200 bg-white px-5 py-4 dark:border-zinc-800 dark:bg-zinc-950">
+              <p className="truncate text-sm font-medium">
+                {deviceImage?.name}
+              </p>
+
+              <p className="mt-1 text-xs text-zinc-400">
+                Photo selected successfully
+              </p>
+            </div>
+          </div>
+        ) : (
+          <label className="group mt-4 flex cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-zinc-200 bg-zinc-50 px-6 py-12 text-center transition hover:border-emerald-400 hover:bg-emerald-50/50 dark:border-zinc-800 dark:bg-zinc-900/40 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/10">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-2xl shadow-sm transition group-hover:scale-105 dark:bg-zinc-950">
+              📷
+            </div>
+
+            <p className="mt-5 font-semibold">Upload a device photo</p>
+
+            <p className="mt-2 max-w-md text-sm leading-6 text-zinc-500">
+              Take a clear photo of the device, its screen, ports, or visible
+              damage.
+            </p>
+
+            <span className="mt-5 rounded-full bg-zinc-900 px-5 py-2.5 text-xs font-semibold text-white transition group-hover:-translate-y-0.5 dark:bg-white dark:text-zinc-950">
+              Choose image
+            </span>
+
+            <input
+              type="file"
+              accept="image/*"
+              onChange={onImageChange}
+              className="hidden"
+            />
+          </label>
+        )}
+      </div>
+
+      {imageError && (
+        <p className="mt-3 text-sm font-medium text-red-500">{imageError}</p>
+      )}
 
       <div className="mt-8 rounded-2xl border border-blue-100 bg-blue-50 p-5 dark:border-blue-900/30 dark:bg-blue-950/20">
         <div className="flex gap-3">
@@ -718,12 +895,18 @@ function AssessmentNavigation({
 
 function AssessmentResult({
   data,
+  recommendation,
   onReset,
 }: {
   data: AssessmentData;
+  recommendation: AssessmentRecommendation | null;
   onReset: () => void;
 }) {
-  const recommendation = calculateRecommendation(data);
+  if (!recommendation) {
+    return null;
+  }
+
+  const presentation = getRecommendationPresentation(recommendation.action);
 
   return (
     <section className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-16">
@@ -758,15 +941,15 @@ function AssessmentResult({
               </p>
 
               <div className="mt-5 flex items-start gap-4">
-                <span className="text-4xl">{recommendation.icon}</span>
+                <span className="text-4xl">{presentation.icon}</span>
 
                 <div>
                   <h2 className="text-2xl font-bold sm:text-3xl">
-                    {recommendation.title}
+                    {presentation.title}
                   </h2>
 
                   <p className="mt-3 leading-7 text-zinc-500">
-                    {recommendation.description}
+                    {recommendation.reason}
                   </p>
                 </div>
               </div>
@@ -872,19 +1055,24 @@ function SelectionIndicator({ selected }: { selected: boolean }) {
     </span>
   );
 }
-
 function Input({
   label,
   required,
+  type = "text",
   placeholder,
   value,
   onChange,
+  min,
+  max,
 }: {
   label: string;
   required?: boolean;
+  type?: string;
   placeholder: string;
   value: string;
   onChange: (value: string) => void;
+  min?: string;
+  max?: string;
 }) {
   return (
     <div>
@@ -895,6 +1083,9 @@ function Input({
       </label>
 
       <input
+        type={type}
+        min={min}
+        max={max}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
@@ -916,61 +1107,6 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-/* ================================================= */
-/* ASSESSMENT ENGINE — TEMPORARY */
-/* ================================================= */
-
-function calculateRecommendation(data: AssessmentData) {
-  if (
-    data.condition === "Works normally" &&
-    (data.intent === "Keep using it" || data.intent === "I'm not sure")
-  ) {
-    return {
-      icon: "♻️",
-      title: "Keep using / Reuse",
-      description:
-        "Your device appears to be functioning normally. Continuing to use it is likely the most sustainable option.",
-    };
-  }
-
-  if (
-    data.condition === "Works with problems" ||
-    data.condition === "Barely works"
-  ) {
-    return {
-      icon: "🔧",
-      title: "Repair → Reuse",
-      description:
-        "Your device may still have useful life left. Consider diagnosing the issue and exploring repair before recycling it.",
-    };
-  }
-
-  if (data.condition === "Doesn't work") {
-    return {
-      icon: "🌱",
-      title: "Evaluate → Recycle",
-      description:
-        "The device is currently non-functional. Consider whether repair is practical; if not, responsible recycling may be the better option.",
-    };
-  }
-
-  if (data.condition === "Physically damaged") {
-    return {
-      icon: "🔐",
-      title: "Protect Data → Evaluate",
-      description:
-        "Before selling, donating, repairing, or recycling a damaged device, protect your personal data and then determine whether repair or recycling makes more sense.",
-    };
-  }
-
-  return {
-    icon: "✨",
-    title: "Assess → Choose Responsibly",
-    description:
-      "More information may be needed before making a strong recommendation.",
-  };
-}
-
 function getDeviceIcon(device: DeviceType | "") {
   switch (device) {
     case "Laptop":
@@ -987,5 +1123,52 @@ function getDeviceIcon(device: DeviceType | "") {
       return "📺";
     default:
       return "🔌";
+  }
+}
+function getRecommendationPresentation(
+  action: AssessmentRecommendation["action"],
+) {
+  switch (action) {
+    case "KEEP_USING":
+      return {
+        icon: "♻️",
+        title: "Keep using / Reuse",
+      };
+
+    case "REPAIR":
+      return {
+        icon: "🔧",
+        title: "Repair → Reuse",
+      };
+
+    case "REUSE":
+      return {
+        icon: "♻️",
+        title: "Reuse",
+      };
+
+    case "SELL_OR_DONATE":
+      return {
+        icon: "🤝",
+        title: "Sell / Donate",
+      };
+
+    case "DATA_ERASURE":
+      return {
+        icon: "🔐",
+        title: "Protect Data First",
+      };
+
+    case "RECYCLE":
+      return {
+        icon: "🌱",
+        title: "Recycle Responsibly",
+      };
+
+    default:
+      return {
+        icon: "✨",
+        title: "Evaluate → Choose Responsibly",
+      };
   }
 }
