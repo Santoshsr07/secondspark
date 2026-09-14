@@ -138,6 +138,8 @@ const intents: {
 
 export default function AssessPage() {
   const [step, setStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   const [data, setData] = useState<AssessmentData>({
     deviceType: "",
@@ -151,7 +153,7 @@ export default function AssessPage() {
 
   const updateData = <K extends keyof AssessmentData>(
     field: K,
-    value: AssessmentData[K]
+    value: AssessmentData[K],
   ) => {
     setData((previous) => ({
       ...previous,
@@ -173,10 +175,83 @@ export default function AssessPage() {
     return false;
   };
 
-  const nextStep = () => {
-    if (!canContinue()) return;
+  const nextStep = async () => {
+    if (!canContinue() || isSubmitting) return;
 
-    setStep((previous) => Math.min(previous + 1, 5));
+    if (step < 4) {
+      setStep((previous) => previous + 1);
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError("");
+
+    if (!data.deviceType || !data.condition || !data.intent) {
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/assessments", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userEmail: "dev@secondspark.local",
+          userName: "Development User",
+
+          device: {
+            type: {
+              Laptop: "LAPTOP",
+              Smartphone: "SMARTPHONE",
+              Tablet: "TABLET",
+              Desktop: "DESKTOP",
+              "Gaming Console": "GAMING_CONSOLE",
+              TV: "TV",
+              Other: "OTHER",
+            }[data.deviceType],
+
+            brand: data.brand,
+            model: data.model,
+
+            purchaseYear: data.age
+              ? new Date().getFullYear() - parseInt(data.age)
+              : undefined,
+          },
+
+          condition: {
+            "Works normally": "WORKS_NORMALLY",
+            "Works with problems": "WORKS_WITH_PROBLEMS",
+            "Barely works": "BARELY_WORKS",
+            "Doesn't work": "DOES_NOT_WORK",
+            "Physically damaged": "PHYSICALLY_DAMAGED",
+          }[data.condition],
+
+          userIntent: {
+            "Keep using it": "KEEP_USING",
+            "Repair it": "REPAIR",
+            "Sell / donate it": "SELL_OR_DONATE",
+            "Recycle it": "RECYCLE",
+            "I'm not sure": "NOT_SURE",
+          }[data.intent],
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to create assessment");
+      }
+
+      console.log("Assessment created:", result);
+
+      setStep(5);
+    } catch {
+      setSubmitError("We couldn't save your assessment. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const previousStep = () => {
@@ -194,6 +269,8 @@ export default function AssessPage() {
       intent: "",
     });
 
+    setSubmitError("");
+    setIsSubmitting(false);
     setStep(1);
   };
 
@@ -201,12 +278,7 @@ export default function AssessPage() {
     <main className="min-h-screen bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">
       <AssessmentHeader step={step} />
 
-      {step <= 4 && (
-        <ProgressIndicator
-          currentStep={step}
-          totalSteps={4}
-        />
-      )}
+      {step <= 4 && <ProgressIndicator currentStep={step} totalSteps={4} />}
 
       {step <= 4 ? (
         <section className="mx-auto flex min-h-[calc(100vh-145px)] max-w-5xl flex-col px-5 py-10 sm:px-8 sm:py-14">
@@ -214,18 +286,11 @@ export default function AssessPage() {
             {step === 1 && (
               <DeviceStep
                 value={data.deviceType}
-                onChange={(value) =>
-                  updateData("deviceType", value)
-                }
+                onChange={(value) => updateData("deviceType", value)}
               />
             )}
 
-            {step === 2 && (
-              <DetailsStep
-                data={data}
-                updateData={updateData}
-              />
-            )}
+            {step === 2 && <DetailsStep data={data} updateData={updateData} />}
 
             {step === 3 && (
               <ConditionStep
@@ -238,9 +303,7 @@ export default function AssessPage() {
             {step === 4 && (
               <IntentStep
                 value={data.intent}
-                onChange={(value) =>
-                  updateData("intent", value)
-                }
+                onChange={(value) => updateData("intent", value)}
               />
             )}
           </div>
@@ -248,15 +311,18 @@ export default function AssessPage() {
           <AssessmentNavigation
             step={step}
             canContinue={canContinue()}
+            isSubmitting={isSubmitting}
+            submitError={submitError}
             onBack={previousStep}
             onNext={nextStep}
           />
+
+          {submitError && step === 4 && (
+            <p className="text-xs font-medium text-red-500">{submitError}</p>
+          )}
         </section>
       ) : (
-        <AssessmentResult
-          data={data}
-          onReset={resetAssessment}
-        />
+        <AssessmentResult data={data} onReset={resetAssessment} />
       )}
     </main>
   );
@@ -276,9 +342,7 @@ function AssessmentHeader({ step }: { step: number }) {
           </div>
 
           <div>
-            <p className="font-bold tracking-tight">
-              SECONDSPARK
-            </p>
+            <p className="font-bold tracking-tight">SECONDSPARK</p>
 
             <p className="hidden text-[10px] font-medium uppercase tracking-[0.2em] text-zinc-400 sm:block">
               Device assessment
@@ -322,10 +386,7 @@ function ProgressIndicator({
             const active = number <= currentStep;
 
             return (
-              <div
-                key={label}
-                className="flex flex-1 items-center"
-              >
+              <div key={label} className="flex flex-1 items-center">
                 <div className="flex items-center gap-2">
                   <div
                     className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition ${
@@ -339,9 +400,7 @@ function ProgressIndicator({
 
                   <span
                     className={`hidden text-xs font-medium sm:block ${
-                      active
-                        ? "text-zinc-900 dark:text-white"
-                        : "text-zinc-400"
+                      active ? "text-zinc-900 dark:text-white" : "text-zinc-400"
                     }`}
                   >
                     {label}
@@ -405,13 +464,9 @@ function DeviceStep({
               <SelectionIndicator selected={value === device.type} />
             </div>
 
-            <h2 className="mt-6 font-semibold">
-              {device.type}
-            </h2>
+            <h2 className="mt-6 font-semibold">{device.type}</h2>
 
-            <p className="mt-1 text-sm text-zinc-500">
-              {device.description}
-            </p>
+            <p className="mt-1 text-sm text-zinc-500">{device.description}</p>
           </button>
         ))}
       </div>
@@ -430,7 +485,7 @@ function DetailsStep({
   data: AssessmentData;
   updateData: <K extends keyof AssessmentData>(
     field: K,
-    value: AssessmentData[K]
+    value: AssessmentData[K],
   ) => void;
 }) {
   return (
@@ -472,13 +527,11 @@ function DetailsStep({
           <span className="text-lg">💡</span>
 
           <div>
-            <p className="text-sm font-semibold">
-              Why do we ask?
-            </p>
+            <p className="text-sm font-semibold">Why do we ask?</p>
 
             <p className="mt-1 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-              Device age, model, and condition can influence whether
-              repair, continued use, or recycling makes the most sense.
+              Device age, model, and condition can influence whether repair,
+              continued use, or recycling makes the most sense.
             </p>
           </div>
         </div>
@@ -500,7 +553,7 @@ function ConditionStep({
   problem: string;
   updateData: <K extends keyof AssessmentData>(
     field: K,
-    value: AssessmentData[K]
+    value: AssessmentData[K],
   ) => void;
 }) {
   return (
@@ -516,23 +569,17 @@ function ConditionStep({
           <button
             key={condition.value}
             type="button"
-            onClick={() =>
-              updateData("condition", condition.value)
-            }
+            onClick={() => updateData("condition", condition.value)}
             className={`flex w-full items-center gap-5 rounded-2xl border p-5 text-left transition ${
               value === condition.value
                 ? "border-amber-500 bg-amber-50 dark:bg-amber-950/20"
                 : "border-zinc-200 hover:border-zinc-300 hover:shadow-sm dark:border-zinc-800 dark:hover:border-zinc-700"
             }`}
           >
-            <SelectionIndicator
-              selected={value === condition.value}
-            />
+            <SelectionIndicator selected={value === condition.value} />
 
             <div>
-              <p className="font-semibold">
-                {condition.value}
-              </p>
+              <p className="font-semibold">{condition.value}</p>
 
               <p className="mt-1 text-sm text-zinc-500">
                 {condition.description}
@@ -545,16 +592,12 @@ function ConditionStep({
       <div className="mt-8">
         <label className="text-sm font-semibold">
           What's wrong with it?
-          <span className="ml-2 font-normal text-zinc-400">
-            Optional
-          </span>
+          <span className="ml-2 font-normal text-zinc-400">Optional</span>
         </label>
 
         <textarea
           value={problem}
-          onChange={(event) =>
-            updateData("problem", event.target.value)
-          }
+          onChange={(event) => updateData("problem", event.target.value)}
           placeholder="Battery problems, cracked screen, overheating, slow performance..."
           rows={4}
           className="mt-3 w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-4 text-sm outline-none transition placeholder:text-zinc-400 focus:border-zinc-500 focus:ring-4 focus:ring-zinc-100 dark:border-zinc-800 dark:bg-zinc-950 dark:focus:ring-zinc-900"
@@ -596,22 +639,14 @@ function IntentStep({
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-2xl">
-                {intent.icon}
-              </span>
+              <span className="text-2xl">{intent.icon}</span>
 
-              <SelectionIndicator
-                selected={value === intent.value}
-              />
+              <SelectionIndicator selected={value === intent.value} />
             </div>
 
-            <p className="mt-6 font-semibold">
-              {intent.value}
-            </p>
+            <p className="mt-6 font-semibold">{intent.value}</p>
 
-            <p className="mt-1 text-sm text-zinc-500">
-              {intent.description}
-            </p>
+            <p className="mt-1 text-sm text-zinc-500">{intent.description}</p>
           </button>
         ))}
       </div>
@@ -626,11 +661,15 @@ function IntentStep({
 function AssessmentNavigation({
   step,
   canContinue,
+  isSubmitting,
+  submitError,
   onBack,
   onNext,
 }: {
   step: number;
   canContinue: boolean;
+  isSubmitting: boolean;
+  submitError: string;
   onBack: () => void;
   onNext: () => void;
 }) {
@@ -652,15 +691,21 @@ function AssessmentNavigation({
           </span>
         )}
 
+        {submitError && step === 4 && (
+          <p className="text-xs font-medium text-red-500">{submitError}</p>
+        )}
+
         <button
           type="button"
           onClick={onNext}
-          disabled={!canContinue}
+          disabled={!canContinue || isSubmitting}
           className="rounded-full bg-zinc-900 px-7 py-3 text-sm font-semibold text-white shadow-lg shadow-zinc-900/10 transition hover:-translate-y-0.5 hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
         >
-          {step === 4
-            ? "Get My Assessment →"
-            : "Continue →"}
+          {isSubmitting
+            ? "Analyzing..."
+            : step === 4
+              ? "Get My Assessment →"
+              : "Continue →"}
         </button>
       </div>
     </div>
@@ -696,8 +741,8 @@ function AssessmentResult({
               </h1>
 
               <p className="mt-4 max-w-2xl leading-7 text-zinc-500">
-                Based on the information you provided, here's the
-                direction we recommend starting with.
+                Based on the information you provided, here's the direction we
+                recommend starting with.
               </p>
             </div>
 
@@ -713,9 +758,7 @@ function AssessmentResult({
               </p>
 
               <div className="mt-5 flex items-start gap-4">
-                <span className="text-4xl">
-                  {recommendation.icon}
-                </span>
+                <span className="text-4xl">{recommendation.icon}</span>
 
                 <div>
                   <h2 className="text-2xl font-bold sm:text-3xl">
@@ -735,25 +778,13 @@ function AssessmentResult({
               </p>
 
               <div className="mt-5 space-y-4">
-                <SummaryRow
-                  label="Device"
-                  value={data.deviceType}
-                />
+                <SummaryRow label="Device" value={data.deviceType} />
 
-                <SummaryRow
-                  label="Brand"
-                  value={data.brand}
-                />
+                <SummaryRow label="Brand" value={data.brand} />
 
-                <SummaryRow
-                  label="Model"
-                  value={data.model}
-                />
+                <SummaryRow label="Model" value={data.model} />
 
-                <SummaryRow
-                  label="Condition"
-                  value={data.condition}
-                />
+                <SummaryRow label="Condition" value={data.condition} />
               </div>
             </div>
           </div>
@@ -768,9 +799,9 @@ function AssessmentResult({
                 </h3>
 
                 <p className="mt-1 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-                  Reuse and repair should be considered before
-                  disposal whenever practical. If recycling becomes
-                  the right choice, protect your data first.
+                  Reuse and repair should be considered before disposal whenever
+                  practical. If recycling becomes the right choice, protect your
+                  data first.
                 </p>
               </div>
             </div>
@@ -828,11 +859,7 @@ function StepHeading({
   );
 }
 
-function SelectionIndicator({
-  selected,
-}: {
-  selected: boolean;
-}) {
+function SelectionIndicator({ selected }: { selected: boolean }) {
   return (
     <span
       className={`flex h-5 w-5 items-center justify-center rounded-full border text-[10px] font-bold transition ${
@@ -864,9 +891,7 @@ function Input({
       <label className="text-sm font-semibold">
         {label}
 
-        {required && (
-          <span className="ml-1 text-emerald-600">*</span>
-        )}
+        {required && <span className="ml-1 text-emerald-600">*</span>}
       </label>
 
       <input
@@ -879,18 +904,10 @@ function Input({
   );
 }
 
-function SummaryRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-4 border-b border-zinc-100 pb-3 last:border-0 last:pb-0 dark:border-zinc-900">
-      <span className="text-sm text-zinc-400">
-        {label}
-      </span>
+      <span className="text-sm text-zinc-400">{label}</span>
 
       <span className="text-right text-sm font-semibold">
         {value || "Not provided"}
@@ -906,8 +923,7 @@ function SummaryRow({
 function calculateRecommendation(data: AssessmentData) {
   if (
     data.condition === "Works normally" &&
-    (data.intent === "Keep using it" ||
-      data.intent === "I'm not sure")
+    (data.intent === "Keep using it" || data.intent === "I'm not sure")
   ) {
     return {
       icon: "♻️",
